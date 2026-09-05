@@ -1,4 +1,10 @@
 const state = { analysis: null, evaluation: null, file: null };
+// Chart instance registry — destroy before re-render to prevent Chart.js reuse errors
+const _charts = {};
+
+function destroyChart(id) {
+    if (_charts[id]) { try { _charts[id].destroy(); } catch (_) {} delete _charts[id]; }
+}
 
 // Session isolation: generate a unique ID per browser tab/session
 const SESSION_ID = (() => {
@@ -38,7 +44,23 @@ const money = (value) => (value === null || value === undefined || isNaN(Number(
 
 const empty = (title, message) => `<div class="empty"><strong>${esc(title)}</strong>${esc(message)}</div>`;
 
+// Chart.js global defaults
+function applyChartDefaults() {
+    if (!window.Chart) return;
+    Chart.defaults.font.family = "'DM Sans', -apple-system, sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = "#6c7782";
+    Chart.defaults.plugins.legend.labels.boxWidth = 10;
+    Chart.defaults.plugins.legend.labels.padding = 14;
+    Chart.defaults.plugins.tooltip.backgroundColor = "#16232d";
+    Chart.defaults.plugins.tooltip.titleColor = "#fff";
+    Chart.defaults.plugins.tooltip.bodyColor = "#a9ded7";
+    Chart.defaults.plugins.tooltip.cornerRadius = 7;
+    Chart.defaults.plugins.tooltip.padding = 10;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+    applyChartDefaults();
     document.querySelectorAll("[data-view]").forEach((el) => el.addEventListener("click", (event) => {
         event.preventDefault(); showView(el.dataset.view);
     }));
@@ -186,134 +208,232 @@ function renderUploadResult(data) {
     });
 }
 
-function renderRiskScoreHistogramSvg(results) {
-    if (!results || !results.length) return "";
-    const bins = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    results.forEach((r) => {
-        const score = Number(r.risk_score) || 0;
-        const idx = Math.min(9, Math.max(0, Math.floor(score * 10)));
-        bins[idx]++;
-    });
-    const maxCount = Math.max(...bins, 1);
-    const chartW = 540, chartH = 150;
-    const padL = 30, padR = 20, padT = 25, padB = 30;
-    const plotW = chartW - padL - padR;
-    const plotH = chartH - padT - padB;
-    const barW = Math.max(4, (plotW / 10) - 8);
+// ─── Chart helpers ────────────────────────────────────────────────────────────
 
-    const colors = [
-        "#2c7a59", "#2c7a59", "#2c7a59",
-        "#3d9270", "#b36b16", "#b36b16", "#b36b16",
-        "#b84942", "#b84942", "#b84942"
+function makeCanvas(id, height = 220) {
+    return `<canvas id="${id}" height="${height}" style="width:100%;"></canvas>`;
+}
+
+/** Risk score distribution histogram using Chart.js */
+function renderRiskHistogramChart(canvasId, results) {
+    destroyChart(canvasId);
+    if (!results || !results.length) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const bins = new Array(10).fill(0);
+    results.forEach((r) => {
+        const score = Math.min(0.9999, Math.max(0, Number(r.risk_score) || 0));
+        bins[Math.floor(score * 10)]++;
+    });
+    const labels = ["0.0–0.1","0.1–0.2","0.2–0.3","0.3–0.4","0.4–0.5","0.5–0.6","0.6–0.7","0.7–0.8","0.8–0.9","0.9–1.0"];
+    const bgColors = [
+        "#2c7a59","#2c7a59","#2c7a59",
+        "#b36b16","#b36b16","#b36b16",
+        "#b84942","#b84942","#b84942","#b84942"
     ];
-
-    let bars = "";
-    bins.forEach((count, i) => {
-        const x = padL + i * (plotW / 10) + 4;
-        const bH = (count / maxCount) * plotH;
-        const y = padT + (plotH - bH);
-        const binLabel = `${(i * 0.1).toFixed(1)}–${((i + 1) * 0.1).toFixed(1)}`;
-        bars += `
-            <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bH, 2)}" rx="3" fill="${colors[i]}" opacity="0.88">
-                <title>Score range: ${binLabel} | ${count} account(s)</title>
-            </rect>
-            ${count > 0 ? `<text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" font-size="9" fill="#6c7782" font-family="var(--mono)">${count}</text>` : ""}
-            <text x="${x + barW / 2}" y="${chartH - 12}" text-anchor="middle" font-size="9" fill="#9ca6ad" font-family="var(--mono)">${(i * 0.1).toFixed(1)}</text>
-        `;
+    _charts[canvasId] = new Chart(canvas, {
+        type: "bar",
+        data: { labels, datasets: [{ label: "Accounts", data: bins, backgroundColor: bgColors, borderRadius: 4, borderSkipped: false }] },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => `Risk score: ${items[0].label}`,
+                        label: (item) => ` ${item.raw} account(s)`,
+                    }
+                },
+                annotation: undefined,
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { family: "'DM Mono', monospace", size: 10 } } },
+                y: { beginAtZero: true, grid: { color: "#f0f2f1" }, ticks: { precision: 0 } },
+            }
+        }
     });
-
-    const tauLowX = padL + 0.35 * plotW;
-    const tauHighX = padL + 0.65 * plotW;
-
-    return `
-        <svg viewBox="0 0 ${chartW} ${chartH}" width="100%" height="auto" style="overflow: visible; display: block;">
-            <line x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}" stroke="#e5e9e9" stroke-width="1" />
-            ${bars}
-            <line x1="${tauLowX}" y1="${padT - 8}" x2="${tauLowX}" y2="${padT + plotH}" stroke="#b36b16" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.85" />
-            <text x="${tauLowX}" y="${padT - 11}" text-anchor="middle" font-size="9" fill="#b36b16" font-weight="600" font-family="var(--mono)">τ_low 0.35</text>
-            <line x1="${tauHighX}" y1="${padT - 8}" x2="${tauHighX}" y2="${padT + plotH}" stroke="#b84942" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.85" />
-            <text x="${tauHighX}" y="${padT - 11}" text-anchor="middle" font-size="9" fill="#b84942" font-weight="600" font-family="var(--mono)">τ_high 0.65</text>
-            <text x="${padL + plotW / 2}" y="${chartH + 2}" text-anchor="middle" font-size="10" fill="#6c7782">Canonical Risk Score Range</text>
-        </svg>
-    `;
 }
 
-function renderDecisionBreakdown(results) {
-    if (!results || !results.length) return "";
+/** Decision donut chart */
+function renderDecisionDonutChart(canvasId, results) {
+    destroyChart(canvasId);
+    if (!results || !results.length) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
     const counts = { ALLOW: 0, REVIEW: 0, BLOCK: 0 };
-    let total = results.length;
-    results.forEach((r) => {
-        const d = r.decision || "ALLOW";
-        counts[d] = (counts[d] || 0) + 1;
+    results.forEach((r) => { const d = r.decision || "ALLOW"; counts[d] = (counts[d] || 0) + 1; });
+    _charts[canvasId] = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+            labels: ["Allow", "Review", "Block"],
+            datasets: [{
+                data: [counts.ALLOW, counts.REVIEW, counts.BLOCK],
+                backgroundColor: ["#2c7a59", "#b36b16", "#b84942"],
+                borderWidth: 2, borderColor: "#fff", hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "62%",
+            plugins: {
+                legend: { position: "bottom", labels: { color: "#6c7782", padding: 16, font: { size: 12 } } },
+                tooltip: { callbacks: { label: (item) => ` ${item.label}: ${item.raw} (${((item.raw / results.length) * 100).toFixed(1)}%)` } }
+            }
+        }
     });
-    const allowPct = ((counts.ALLOW / total) * 100).toFixed(1);
-    const reviewPct = ((counts.REVIEW / total) * 100).toFixed(1);
-    const blockPct = ((counts.BLOCK / total) * 100).toFixed(1);
-
-    return `
-        <div style="margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px;">
-            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
-                <span class="eyebrow" style="font-size: 10px;">Policy Decisions</span>
-                <span style="font-family: var(--mono); color: var(--muted);">${total} accounts</span>
-            </div>
-            <div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #e5e9e9; margin-bottom: 10px;">
-                <div style="width: ${allowPct}%; background: #2c7a59;" title="Allow: ${counts.ALLOW} (${allowPct}%)"></div>
-                <div style="width: ${reviewPct}%; background: #b36b16;" title="Review: ${counts.REVIEW} (${reviewPct}%)"></div>
-                <div style="width: ${blockPct}%; background: #b84942;" title="Block: ${counts.BLOCK} (${blockPct}%)"></div>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 11px; flex-wrap: wrap; gap: 6px;">
-                <span style="color: #2c7a59; display: flex; align-items: center; gap: 4px;">
-                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #2c7a59; display: inline-block;"></span>
-                    ALLOW: <strong>${counts.ALLOW}</strong> (${allowPct}%)
-                </span>
-                <span style="color: #b36b16; display: flex; align-items: center; gap: 4px;">
-                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #b36b16; display: inline-block;"></span>
-                    REVIEW: <strong>${counts.REVIEW}</strong> (${reviewPct}%)
-                </span>
-                <span style="color: #b84942; display: flex; align-items: center; gap: 4px;">
-                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #b84942; display: inline-block;"></span>
-                    BLOCK: <strong>${counts.BLOCK}</strong> (${blockPct}%)
-                </span>
-            </div>
-        </div>
-    `;
 }
 
-function renderSpikesComparisonChart(spikes) {
-    if (!spikes || !spikes.length) return "";
-    return `
-        <div style="display: flex; flex-direction: column; gap: 14px;">
-            ${spikes.slice(0, 4).map((s) => {
-                const basePct = Math.min(100, Math.max(2, (Number(s.baseline_rate) || 0) * 100));
-                const spikePct = Math.min(100, Math.max(2, (Number(s.recent_rate) || 0) * 100));
-                return `
-                    <div style="border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fafbfb;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 6px;">
-                            <strong>${esc(s.merchant_id)}</strong>
-                            <span class="tag" style="background: var(--red-soft); color: var(--red); font-weight: 600;">
-                                ${s.fold_increase ? `${esc(s.fold_increase)}× spike` : "Elevated risk"}
-                            </span>
-                        </div>
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            <span style="font-size: 10px; color: var(--muted); width: 60px;">Baseline:</span>
-                            <div style="flex: 1; height: 6px; background: #e5e9e9; border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${basePct}%; height: 100%; background: #9ca6ad; border-radius: 3px;"></div>
-                            </div>
-                            <span style="font-size: 10px; font-family: var(--mono); width: 45px; text-align: right; color: var(--muted);">${pct(s.baseline_rate)}</span>
-                        </div>
-                        <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
-                            <span style="font-size: 10px; color: var(--red); width: 60px; font-weight: 600;">Spike:</span>
-                            <div style="flex: 1; height: 6px; background: #e5e9e9; border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${spikePct}%; height: 100%; background: #b84942; border-radius: 3px;"></div>
-                            </div>
-                            <span style="font-size: 10px; font-family: var(--mono); width: 45px; text-align: right; color: var(--red); font-weight: 600;">${pct(s.recent_rate)}</span>
-                        </div>
-                    </div>
-                `;
-            }).join("")}
-        </div>
-    `;
+/** Merchant spike comparison horizontal bar chart */
+function renderSpikesBarChart(canvasId, spikes) {
+    destroyChart(canvasId);
+    if (!spikes || !spikes.length) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const top = spikes.slice(0, 6);
+    _charts[canvasId] = new Chart(canvas, {
+        type: "bar",
+        data: {
+            labels: top.map((s) => String(s.merchant_id || "Unknown").slice(0, 18)),
+            datasets: [
+                { label: "Baseline rate", data: top.map((s) => +((Number(s.baseline_rate) || 0) * 100).toFixed(2)), backgroundColor: "#9ca6ad", borderRadius: 3 },
+                { label: "Spike rate", data: top.map((s) => +((Number(s.recent_rate) || 0) * 100).toFixed(2)), backgroundColor: "#b84942", borderRadius: 3 },
+            ]
+        },
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: "bottom" },
+                tooltip: { callbacks: { label: (item) => ` ${item.dataset.label}: ${item.raw}%` } }
+            },
+            scales: {
+                x: { grid: { color: "#f0f2f1" }, ticks: { callback: (v) => v + "%" }, beginAtZero: true },
+                y: { grid: { display: false }, ticks: { font: { family: "'DM Mono', monospace", size: 11 } } }
+            }
+        }
+    });
 }
+
+/** Financial impact bar chart */
+function renderFinancialBarChart(canvasId, financial) {
+    destroyChart(canvasId);
+    if (!financial) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const fields = [
+        { label: "Suspicious value", key: "observed_suspicious_value_inr", color: "#b84942" },
+        { label: "Potential exposure", key: "potential_exposure_inr", color: "#b36b16" },
+        { label: "Intervention cost", key: "false_positive_cost_inr", color: "#9ca6ad" },
+        { label: "Net benefit", key: "estimated_net_benefit_inr", color: "#2c7a59" },
+    ].filter((f) => financial[f.key] !== null && financial[f.key] !== undefined && !isNaN(Number(financial[f.key])));
+    if (!fields.length) return;
+    _charts[canvasId] = new Chart(canvas, {
+        type: "bar",
+        data: {
+            labels: fields.map((f) => f.label),
+            datasets: [{
+                label: "Amount (₹)",
+                data: fields.map((f) => Number(financial[f.key])),
+                backgroundColor: fields.map((f) => f.color),
+                borderRadius: 6, borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (item) => ` ₹${Number(item.raw).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: { beginAtZero: true, grid: { color: "#f0f2f1" }, ticks: { callback: (v) => "₹" + (v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? (v / 1e3).toFixed(0) + "K" : v) } }
+            }
+        }
+    });
+}
+
+/** Model sub-score radar chart */
+function renderSubScoreRadar(canvasId, results) {
+    destroyChart(canvasId);
+    if (!results || !results.length) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    // Average sub-scores across all results that have them
+    const scored = results.filter((r) => r.sub_scores);
+    if (!scored.length) return;
+    const avg = (key) => scored.reduce((s, r) => s + (Number(r.sub_scores?.[key]) || 0), 0) / scored.length;
+    _charts[canvasId] = new Chart(canvas, {
+        type: "radar",
+        data: {
+            labels: ["ML Risk", "Anomaly", "Spike Risk", "Cluster Risk"],
+            datasets: [{
+                label: "Avg sub-score",
+                data: [
+                    +(avg("ml_probability") * 100).toFixed(1),
+                    +(avg("anomaly_score") * 100).toFixed(1),
+                    +(avg("temporal_spike_risk") * 100).toFixed(1),
+                    +(avg("cluster_risk") * 100).toFixed(1),
+                ],
+                backgroundColor: "rgba(11,129,118,0.15)",
+                borderColor: "#0b8176",
+                pointBackgroundColor: "#0b8176",
+                pointRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: (i) => ` ${i.raw.toFixed(1)}%` } } },
+            scales: { r: { beginAtZero: true, max: 100, ticks: { callback: (v) => v + "%", stepSize: 25 }, grid: { color: "#e5e9e9" } } }
+        }
+    });
+}
+
+/** Precision / recall bar chart */
+function renderPrBarChart(canvasId, perf) {
+    destroyChart(canvasId);
+    if (!perf || perf.precision === undefined) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    _charts[canvasId] = new Chart(canvas, {
+        type: "bar",
+        data: {
+            labels: ["Precision", "Recall", "F1-Score"],
+            datasets: [{
+                label: "Score",
+                data: [
+                    +((perf.precision || 0) * 100).toFixed(2),
+                    +((perf.recall || 0) * 100).toFixed(2),
+                    +((perf.f1 || 0) * 100).toFixed(2),
+                ],
+                backgroundColor: ["#0b8176", "#2c7a59", "#b36b16"],
+                borderRadius: 6, borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (i) => ` ${i.raw.toFixed(1)}%` } }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: { beginAtZero: true, max: 100, grid: { color: "#f0f2f1" }, ticks: { callback: (v) => v + "%" } }
+            }
+        }
+    });
+}
+
+// ─── Views ────────────────────────────────────────────────────────────────────
 
 function renderAnalysisOverview(data) {
     const summary = data.summary || {};
@@ -328,53 +448,45 @@ function renderAnalysisOverview(data) {
         : `<span class="decision decision-allow">NO SPIKE</span><h3>No emerging merchant spike detected.</h3><p>Review the available fields below and keep monitoring the next data window.</p><button class="text-button" data-view-link="analyze">Analyze another file →</button>`;
     document.querySelectorAll("[data-view-link]").forEach((el) => el.addEventListener("click", () => showView(el.dataset.viewLink)));
 
-    // Render interactive graphs in overview
+    // Interactive charts
     const hasAccounts = (data.results || []).length > 0;
     const hasSpikes = (data.spikes || []).length > 0;
     const visualsEl = document.getElementById("overview-visuals");
     if (visualsEl) {
         if (hasAccounts || hasSpikes) {
             visualsEl.innerHTML = `
-                <div class="two-column" style="margin-top: 14px;">
+                <div class="two-column" style="margin-top:14px;">
                     <div class="card">
                         <div class="card-header">
-                            <div>
-                                <p class="eyebrow">Risk distribution</p>
-                                <h3>Risk score frequency histogram</h3>
-                            </div>
-                            <span class="tag" style="font-family: var(--mono); font-size: 11px;">
-                                ${data.results?.length || 0} accounts
-                            </span>
+                            <div><p class="eyebrow">Risk distribution</p><h3>Risk score histogram</h3></div>
+                            <span class="tag" style="font-family:var(--mono);font-size:11px;">${data.results?.length || 0} accounts</span>
                         </div>
-                        <div class="card-body" style="padding: 20px 22px;">
-                            ${hasAccounts ? renderRiskScoreHistogramSvg(data.results) : empty("Histogram unavailable", "Account identifiers were not present in this file.")}
-                            ${hasAccounts ? renderDecisionBreakdown(data.results) : ""}
+                        <div class="card-body" style="padding:20px 22px;">
+                            ${hasAccounts
+                                ? `<div style="height:200px;">${makeCanvas("ov-hist")}</div>`
+                                : empty("Histogram unavailable", "Account identifiers were not present in this file.")}
                         </div>
                     </div>
-
                     <div class="card">
                         <div class="card-header">
-                            <div>
-                                <p class="eyebrow">Temporal risk</p>
-                                <h3>${hasSpikes ? "Merchant spike comparison" : "Policy decisions"}</h3>
-                            </div>
+                            <div><p class="eyebrow">${hasSpikes ? "Temporal risk" : "Policy decisions"}</p>
+                            <h3>${hasSpikes ? "Merchant spike comparison" : "Decision breakdown"}</h3></div>
                         </div>
-                        <div class="card-body" style="padding: 20px 22px;">
+                        <div class="card-body" style="padding:20px 22px;">
                             ${hasSpikes
-                                ? renderSpikesComparisonChart(data.spikes)
-                                : (hasAccounts
-                                    ? `<div style="padding: 10px 0;">
-                                           <p class="finding-description" style="margin-bottom: 12px;">
-                                               Accounts evaluated under canonical policy threshold rules (Allow &lt; 0.35, Review 0.35–0.65, Block &ge; 0.65).
-                                           </p>
-                                           ${renderDecisionBreakdown(data.results)}
-                                       </div>`
-                                    : empty("Spike comparison unavailable", "No merchant spikes detected in this dataset.")
-                                  )}
+                                ? `<div style="height:200px;">${makeCanvas("ov-spikes")}</div>`
+                                : hasAccounts
+                                    ? `<div style="height:200px;">${makeCanvas("ov-donut")}</div>`
+                                    : empty("Unavailable", "No merchant spikes detected in this dataset.")}
                         </div>
                     </div>
-                </div>
-            `;
+                </div>`;
+            // Render charts after DOM update
+            requestAnimationFrame(() => {
+                if (hasAccounts) renderRiskHistogramChart("ov-hist", data.results);
+                if (hasSpikes) renderSpikesBarChart("ov-spikes", data.spikes);
+                else if (hasAccounts) renderDecisionDonutChart("ov-donut", data.results);
+            });
         } else {
             visualsEl.innerHTML = "";
         }
@@ -410,14 +522,50 @@ async function renderFindings() {
             }
         } catch {}
     }
+    const chartsEl = document.getElementById("findings-charts");
     if (!data || (!data.spikes?.length && !data.clusters?.length && !data.results?.length)) {
         document.getElementById("findings-summary").innerHTML = "";
+        if (chartsEl) chartsEl.innerHTML = "";
         document.getElementById("findings-list").innerHTML = empty("No risk findings", "Upload payment data to identify emerging activity patterns.");
         return;
     }
+
     const spikes = data.spikes || [], clusters = data.clusters || [], accounts = (data.results || []).filter((item) => item.decision !== "ALLOW").slice(0, 10);
     const findings = spikes.concat(clusters.map((c) => ({ ...c, description: `${c.member_count} accounts share related payment signals.`, severity: c.risk_score >= .7 ? "HIGH" : "MEDIUM", recommendedAction: "REVIEW", merchant_id: c.cluster_id, clusterFinding: true }))).concat(accounts.map((account) => ({ ...account, description: account.reasoning || "This account is outside the expected payment behavior.", severity: account.decision, recommendedAction: account.decision, merchant_id: account.account_id, accountFinding: true })));
     document.getElementById("findings-summary").innerHTML = `<span class="summary-pill"><strong>${num(spikes.length)}</strong> activity changes</span><span class="summary-pill"><strong>${num(clusters.length)}</strong> related groups</span><span class="summary-pill"><strong>${num(data.accounts_count)}</strong> accounts scored</span>`;
+
+    // Charts for findings view
+    const hasAccounts = (data.results || []).length > 0;
+    const hasSpikes = spikes.length > 0;
+    if (chartsEl && (hasAccounts || hasSpikes)) {
+        chartsEl.innerHTML = `
+            <div class="card">
+                <div class="card-header"><div><p class="eyebrow">Account risk</p><h3>Decision breakdown</h3></div></div>
+                <div class="card-body" style="padding:20px 22px;">
+                    ${hasAccounts
+                        ? `<div style="height:210px;">${makeCanvas("fi-donut")}</div>`
+                        : empty("No accounts scored", "Account IDs were not provided in this dataset.")}
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><div><p class="eyebrow">Risk signal</p><h3>${hasSpikes ? "Spike rates by merchant" : "Risk score distribution"}</h3></div></div>
+                <div class="card-body" style="padding:20px 22px;">
+                    ${hasSpikes
+                        ? `<div style="height:210px;">${makeCanvas("fi-spikes")}</div>`
+                        : hasAccounts
+                            ? `<div style="height:210px;">${makeCanvas("fi-hist")}</div>`
+                            : empty("No chart data", "Upload data with account or merchant fields.")}
+                </div>
+            </div>`;
+        requestAnimationFrame(() => {
+            if (hasAccounts) renderDecisionDonutChart("fi-donut", data.results);
+            if (hasSpikes) renderSpikesBarChart("fi-spikes", spikes);
+            else if (hasAccounts) renderRiskHistogramChart("fi-hist", data.results);
+        });
+    } else if (chartsEl) {
+        chartsEl.innerHTML = "";
+    }
+
     document.getElementById("findings-list").innerHTML = findings.length
         ? findings.map((item) => {
             const entityId = item.merchant_id || item.cluster_id || item.account_id;
@@ -445,6 +593,7 @@ async function renderFindings() {
 
 async function renderImpact() {
     const target = document.getElementById("impact-content");
+    const chartWrap = document.getElementById("impact-chart-wrap");
     const financial = state.analysis?.financial_metrics?.financial;
     if (!financial || (financial.observed_suspicious_value_inr === undefined && financial.potential_exposure_inr === undefined)) {
         target.innerHTML = `<div class="card">${empty(
@@ -453,6 +602,7 @@ async function renderImpact() {
                 ? "Financial estimates require transaction amounts and verified fraud labels in the uploaded CSV. The product never invents financial exposure."
                 : "No payment data has been uploaded yet. Upload transaction CSV data with amounts and fraud labels to calculate financial impact."
         )}</div>`;
+        if (chartWrap) chartWrap.innerHTML = "";
         return;
     }
     target.innerHTML = `<div class="impact-grid">
@@ -462,10 +612,20 @@ async function renderImpact() {
         <div class="metric"><div class="metric-label">Estimated net benefit</div><div class="metric-value">${money(financial.estimated_net_benefit_inr)}</div><div class="metric-note">Unavailable for account-level evaluation</div></div>
     </div>
     <details class="impact-note"><summary>How this estimate was calculated</summary><p>Observed suspicious value comes from supplied labels. Potential exposure is the value associated with activity selected by policy. Avoidable exposure and net benefit require transaction-level validation and are therefore not estimated here.</p></details>`;
+
+    // Financial bar chart
+    if (chartWrap) {
+        chartWrap.innerHTML = `<div class="card">
+            <div class="card-header"><div><p class="eyebrow">Visual breakdown</p><h3>Financial metrics comparison</h3></div></div>
+            <div class="card-body" style="padding:20px 22px;"><div style="height:240px;">${makeCanvas("imp-bar")}</div></div>
+        </div>`;
+        requestAnimationFrame(() => renderFinancialBarChart("imp-bar", financial));
+    }
 }
 
 async function loadModel() {
     const target = document.getElementById("model-content");
+    const chartsEl = document.getElementById("model-charts");
     const uploadPerf = state.analysis?.model_performance;
     let uploadSection = "";
     if (uploadPerf && uploadPerf.precision !== undefined) {
@@ -479,6 +639,31 @@ async function loadModel() {
         : "";
     const methodologySection = `<div class="card methodology-card"><div class="card-header"><div><p class="eyebrow">Methodology</p><h3>How decisions are assembled</h3></div></div><div class="technical-details methodology-body"><p class="finding-description">The final decision combines calibrated model probability, anomaly score, behavioral deviation, related-activity evidence, and temporal activity changes. The policy then maps the fused risk score to Allow, Review, or Block.</p><div class="finding-evidence"><span class="tag">Model v1.2.0-gbm</span><span class="tag">Features v1.0.0</span><span class="tag">Policy v1.0.0</span><span class="tag">Calibration: sigmoid</span></div></div></div>`;
     target.innerHTML = uploadSection + emptyNotice + methodologySection;
+
+    // Model charts
+    if (chartsEl) {
+        const results = state.analysis?.results || [];
+        const hasPerf = uploadPerf && uploadPerf.precision !== undefined;
+        const hasSubScores = results.some((r) => r.sub_scores);
+        if (hasPerf || hasSubScores) {
+            chartsEl.innerHTML = `<div class="two-column">
+                ${hasPerf ? `<div class="card">
+                    <div class="card-header"><div><p class="eyebrow">Performance</p><h3>Precision · Recall · F1</h3></div></div>
+                    <div class="card-body" style="padding:20px 22px;"><div style="height:220px;">${makeCanvas("md-pr")}</div></div>
+                </div>` : ""}
+                ${hasSubScores ? `<div class="card">
+                    <div class="card-header"><div><p class="eyebrow">Risk signal composition</p><h3>Average sub-scores (radar)</h3></div></div>
+                    <div class="card-body" style="padding:20px 22px;"><div style="height:220px;">${makeCanvas("md-radar")}</div></div>
+                </div>` : ""}
+            </div>`;
+            requestAnimationFrame(() => {
+                if (hasPerf) renderPrBarChart("md-pr", uploadPerf);
+                if (hasSubScores) renderSubScoreRadar("md-radar", results);
+            });
+        } else {
+            chartsEl.innerHTML = "";
+        }
+    }
 }
 
 async function runInvestigation() {

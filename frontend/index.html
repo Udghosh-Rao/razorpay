@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="shell">
@@ -105,12 +106,15 @@
 
                 <section class="view" id="view-findings">
                     <div class="section-heading page-heading"><div><p class="eyebrow">Evidence first</p><h2>Risk findings</h2><p>Patterns worth a closer look, ordered by their potential business impact.</p></div></div>
-                    <div id="findings-summary" class="finding-summary"></div><div class="card"><div id="findings-list"></div></div>
+                    <div id="findings-summary" class="finding-summary"></div>
+                    <div id="findings-charts" class="two-column" style="margin-bottom:14px;"></div>
+                    <div class="card"><div id="findings-list"></div></div>
                 </section>
 
                 <section class="view" id="view-impact">
                     <div class="section-heading page-heading"><div><p class="eyebrow">Money at stake</p><h2>Financial impact</h2><p>Exposure estimates are shown only when the data supports them.</p></div></div>
                     <div id="impact-content"></div>
+                    <div id="impact-chart-wrap" style="margin-top:14px;"></div>
                 </section>
 
                 <section class="view" id="view-investigations">
@@ -121,6 +125,7 @@
                 <section class="view" id="view-model">
                     <div class="section-heading page-heading"><div><p class="eyebrow">Technical evidence</p><h2>Model &amp; evaluation</h2><p>This section shows how the detection system performs on data it did not use for training.</p></div></div>
                     <div id="model-content"></div>
+                    <div id="model-charts" style="margin-top:14px;"></div>
                 </section>
 
                 <section class="view" id="view-audit">
