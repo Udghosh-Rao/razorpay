@@ -246,7 +246,7 @@ def clean_timestamp_series(series):
     has_date_separators = sample_str.str.contains(r"[-/:]").any()
 
     if has_date_separators:
-        parsed = pd.to_datetime(series, errors="coerce", utc=True)
+        parsed = pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
         if parsed.notna().sum() >= max(1, int(len(series) * 0.5)):
             return parsed
 
@@ -262,7 +262,7 @@ def clean_timestamp_series(series):
             base_time = pd.Timestamp("2026-01-01", tz="UTC")
             return base_time + pd.to_timedelta(num_series.fillna(0), unit="s")
 
-    return pd.to_datetime(series, errors="coerce", utc=True)
+    return pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
 
 
 def infer_columns_by_content(df, resolved):
@@ -276,7 +276,7 @@ def infer_columns_by_content(df, resolved):
             sample = df[col].dropna().head(30)
             if len(sample) == 0:
                 continue
-            parsed = pd.to_datetime(sample, errors="coerce")
+            parsed = pd.to_datetime(sample, errors="coerce", format="mixed")
             if parsed.notna().sum() >= max(1, int(len(sample) * 0.7)):
                 resolved["timestamp"] = col
                 mapped_cols.add(col)

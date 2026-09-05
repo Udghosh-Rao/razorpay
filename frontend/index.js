@@ -106,6 +106,8 @@ async function loadOverview() {
                 <p>No transaction data has been analyzed yet. Upload a CSV file to inspect payment risk, detect unusual patterns, and review findings.</p>
                 <button class="button button-primary" style="margin-top:12px;" data-action="open-upload">Analyze Payment Data →</button>`;
             document.getElementById("analysis-detail-panels").innerHTML = "";
+            const visEl = document.getElementById("overview-visuals");
+            if (visEl) visEl.innerHTML = "";
             document.querySelectorAll("[data-action]").forEach((el) => el.addEventListener("click", () => {
                 if (el.dataset.action === "open-upload") showView("analyze");
             }));
@@ -184,6 +186,135 @@ function renderUploadResult(data) {
     });
 }
 
+function renderRiskScoreHistogramSvg(results) {
+    if (!results || !results.length) return "";
+    const bins = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    results.forEach((r) => {
+        const score = Number(r.risk_score) || 0;
+        const idx = Math.min(9, Math.max(0, Math.floor(score * 10)));
+        bins[idx]++;
+    });
+    const maxCount = Math.max(...bins, 1);
+    const chartW = 540, chartH = 150;
+    const padL = 30, padR = 20, padT = 25, padB = 30;
+    const plotW = chartW - padL - padR;
+    const plotH = chartH - padT - padB;
+    const barW = Math.max(4, (plotW / 10) - 8);
+
+    const colors = [
+        "#2c7a59", "#2c7a59", "#2c7a59",
+        "#3d9270", "#b36b16", "#b36b16", "#b36b16",
+        "#b84942", "#b84942", "#b84942"
+    ];
+
+    let bars = "";
+    bins.forEach((count, i) => {
+        const x = padL + i * (plotW / 10) + 4;
+        const bH = (count / maxCount) * plotH;
+        const y = padT + (plotH - bH);
+        const binLabel = `${(i * 0.1).toFixed(1)}–${((i + 1) * 0.1).toFixed(1)}`;
+        bars += `
+            <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bH, 2)}" rx="3" fill="${colors[i]}" opacity="0.88">
+                <title>Score range: ${binLabel} | ${count} account(s)</title>
+            </rect>
+            ${count > 0 ? `<text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" font-size="9" fill="#6c7782" font-family="var(--mono)">${count}</text>` : ""}
+            <text x="${x + barW / 2}" y="${chartH - 12}" text-anchor="middle" font-size="9" fill="#9ca6ad" font-family="var(--mono)">${(i * 0.1).toFixed(1)}</text>
+        `;
+    });
+
+    const tauLowX = padL + 0.35 * plotW;
+    const tauHighX = padL + 0.65 * plotW;
+
+    return `
+        <svg viewBox="0 0 ${chartW} ${chartH}" width="100%" height="auto" style="overflow: visible; display: block;">
+            <line x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}" stroke="#e5e9e9" stroke-width="1" />
+            ${bars}
+            <line x1="${tauLowX}" y1="${padT - 8}" x2="${tauLowX}" y2="${padT + plotH}" stroke="#b36b16" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.85" />
+            <text x="${tauLowX}" y="${padT - 11}" text-anchor="middle" font-size="9" fill="#b36b16" font-weight="600" font-family="var(--mono)">τ_low 0.35</text>
+            <line x1="${tauHighX}" y1="${padT - 8}" x2="${tauHighX}" y2="${padT + plotH}" stroke="#b84942" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.85" />
+            <text x="${tauHighX}" y="${padT - 11}" text-anchor="middle" font-size="9" fill="#b84942" font-weight="600" font-family="var(--mono)">τ_high 0.65</text>
+            <text x="${padL + plotW / 2}" y="${chartH + 2}" text-anchor="middle" font-size="10" fill="#6c7782">Canonical Risk Score Range</text>
+        </svg>
+    `;
+}
+
+function renderDecisionBreakdown(results) {
+    if (!results || !results.length) return "";
+    const counts = { ALLOW: 0, REVIEW: 0, BLOCK: 0 };
+    let total = results.length;
+    results.forEach((r) => {
+        const d = r.decision || "ALLOW";
+        counts[d] = (counts[d] || 0) + 1;
+    });
+    const allowPct = ((counts.ALLOW / total) * 100).toFixed(1);
+    const reviewPct = ((counts.REVIEW / total) * 100).toFixed(1);
+    const blockPct = ((counts.BLOCK / total) * 100).toFixed(1);
+
+    return `
+        <div style="margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+                <span class="eyebrow" style="font-size: 10px;">Policy Decisions</span>
+                <span style="font-family: var(--mono); color: var(--muted);">${total} accounts</span>
+            </div>
+            <div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #e5e9e9; margin-bottom: 10px;">
+                <div style="width: ${allowPct}%; background: #2c7a59;" title="Allow: ${counts.ALLOW} (${allowPct}%)"></div>
+                <div style="width: ${reviewPct}%; background: #b36b16;" title="Review: ${counts.REVIEW} (${reviewPct}%)"></div>
+                <div style="width: ${blockPct}%; background: #b84942;" title="Block: ${counts.BLOCK} (${blockPct}%)"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; flex-wrap: wrap; gap: 6px;">
+                <span style="color: #2c7a59; display: flex; align-items: center; gap: 4px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #2c7a59; display: inline-block;"></span>
+                    ALLOW: <strong>${counts.ALLOW}</strong> (${allowPct}%)
+                </span>
+                <span style="color: #b36b16; display: flex; align-items: center; gap: 4px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #b36b16; display: inline-block;"></span>
+                    REVIEW: <strong>${counts.REVIEW}</strong> (${reviewPct}%)
+                </span>
+                <span style="color: #b84942; display: flex; align-items: center; gap: 4px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #b84942; display: inline-block;"></span>
+                    BLOCK: <strong>${counts.BLOCK}</strong> (${blockPct}%)
+                </span>
+            </div>
+        </div>
+    `;
+}
+
+function renderSpikesComparisonChart(spikes) {
+    if (!spikes || !spikes.length) return "";
+    return `
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+            ${spikes.slice(0, 4).map((s) => {
+                const basePct = Math.min(100, Math.max(2, (Number(s.baseline_rate) || 0) * 100));
+                const spikePct = Math.min(100, Math.max(2, (Number(s.recent_rate) || 0) * 100));
+                return `
+                    <div style="border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fafbfb;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 6px;">
+                            <strong>${esc(s.merchant_id)}</strong>
+                            <span class="tag" style="background: var(--red-soft); color: var(--red); font-weight: 600;">
+                                ${s.fold_increase ? `${esc(s.fold_increase)}× spike` : "Elevated risk"}
+                            </span>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <span style="font-size: 10px; color: var(--muted); width: 60px;">Baseline:</span>
+                            <div style="flex: 1; height: 6px; background: #e5e9e9; border-radius: 3px; overflow: hidden;">
+                                <div style="width: ${basePct}%; height: 100%; background: #9ca6ad; border-radius: 3px;"></div>
+                            </div>
+                            <span style="font-size: 10px; font-family: var(--mono); width: 45px; text-align: right; color: var(--muted);">${pct(s.baseline_rate)}</span>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+                            <span style="font-size: 10px; color: var(--red); width: 60px; font-weight: 600;">Spike:</span>
+                            <div style="flex: 1; height: 6px; background: #e5e9e9; border-radius: 3px; overflow: hidden;">
+                                <div style="width: ${spikePct}%; height: 100%; background: #b84942; border-radius: 3px;"></div>
+                            </div>
+                            <span style="font-size: 10px; font-family: var(--mono); width: 45px; text-align: right; color: var(--red); font-weight: 600;">${pct(s.recent_rate)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join("")}
+        </div>
+    `;
+}
+
 function renderAnalysisOverview(data) {
     const summary = data.summary || {};
     document.getElementById("overview-metrics").innerHTML = `
@@ -196,6 +327,59 @@ function renderAnalysisOverview(data) {
         ? `<span class="decision decision-review">REVIEW</span><h3>Investigate the leading activity change.</h3><p>${esc(data.spikes[0].description || "A suspicious activity pattern needs review.")}</p><button class="text-button" data-view-link="findings">Open evidence →</button>`
         : `<span class="decision decision-allow">NO SPIKE</span><h3>No emerging merchant spike detected.</h3><p>Review the available fields below and keep monitoring the next data window.</p><button class="text-button" data-view-link="analyze">Analyze another file →</button>`;
     document.querySelectorAll("[data-view-link]").forEach((el) => el.addEventListener("click", () => showView(el.dataset.viewLink)));
+
+    // Render interactive graphs in overview
+    const hasAccounts = (data.results || []).length > 0;
+    const hasSpikes = (data.spikes || []).length > 0;
+    const visualsEl = document.getElementById("overview-visuals");
+    if (visualsEl) {
+        if (hasAccounts || hasSpikes) {
+            visualsEl.innerHTML = `
+                <div class="two-column" style="margin-top: 14px;">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <p class="eyebrow">Risk distribution</p>
+                                <h3>Risk score frequency histogram</h3>
+                            </div>
+                            <span class="tag" style="font-family: var(--mono); font-size: 11px;">
+                                ${data.results?.length || 0} accounts
+                            </span>
+                        </div>
+                        <div class="card-body" style="padding: 20px 22px;">
+                            ${hasAccounts ? renderRiskScoreHistogramSvg(data.results) : empty("Histogram unavailable", "Account identifiers were not present in this file.")}
+                            ${hasAccounts ? renderDecisionBreakdown(data.results) : ""}
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <p class="eyebrow">Temporal risk</p>
+                                <h3>${hasSpikes ? "Merchant spike comparison" : "Policy decisions"}</h3>
+                            </div>
+                        </div>
+                        <div class="card-body" style="padding: 20px 22px;">
+                            ${hasSpikes
+                                ? renderSpikesComparisonChart(data.spikes)
+                                : (hasAccounts
+                                    ? `<div style="padding: 10px 0;">
+                                           <p class="finding-description" style="margin-bottom: 12px;">
+                                               Accounts evaluated under canonical policy threshold rules (Allow &lt; 0.35, Review 0.35–0.65, Block &ge; 0.65).
+                                           </p>
+                                           ${renderDecisionBreakdown(data.results)}
+                                       </div>`
+                                    : empty("Spike comparison unavailable", "No merchant spikes detected in this dataset.")
+                                  )}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            visualsEl.innerHTML = "";
+        }
+    }
+
     const topFinding = (data.spikes || [])[0];
     const financial = data.financial_metrics?.financial;
     const evidence = [];
