@@ -217,7 +217,8 @@ def _get_session_id(x_session_id: str = "") -> str:
 # Health check
 # ---------------------------------------------------------------------------
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/health/", methods=["GET", "HEAD"])
 def health_check():
     model_ok = model_artifacts_available()
 
@@ -235,6 +236,11 @@ def health_check():
         "policy_version": POLICY_VERSION,
         "checks": checks,
     }
+
+
+@app.head("/")
+def root_head():
+    return Response(status_code=200)
 
 
 # ---------------------------------------------------------------------------
