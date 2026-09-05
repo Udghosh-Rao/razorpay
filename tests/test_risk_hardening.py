@@ -151,4 +151,61 @@ def test_fresh_session_has_zero_dummy_data():
     assert thresh["evaluation_available"] is False
 
 
+def test_semicolon_and_tab_delimiters():
+    # Semicolon
+    r1 = client.post(
+        "/api/upload",
+        files={"file": ("semi.csv", io.BytesIO(b"cust_id;amt;trans_date\nC1;100;2026-01-01 10:00:00\n"), "text/csv")}
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["validation_summary"]["valid_rows"] == 1
+
+    # Tab
+    r2 = client.post(
+        "/api/upload",
+        files={"file": ("tab.csv", io.BytesIO(b"account_id\tamount\ttimestamp\nA1\t50.0\t2026-01-01 10:00:00\n"), "text/csv")}
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["validation_summary"]["valid_rows"] == 1
+
+
+def test_currency_symbols_and_commas():
+    csv_text = 'customer,total_amount,created_at\nC1,"₹1,500.50",2026-01-01 10:00:00\nC2,"$2,400.00",2026-01-01 11:00:00\n'
+    res = client.post(
+        "/api/upload",
+        files={"file": ("currency.csv", io.BytesIO(csv_text.encode("utf-8")), "text/csv")}
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["validation_summary"]["valid_rows"] == 2
+
+
+def test_sparkov_and_paysim_column_aliases():
+    # Sparkov
+    sparkov_csv = "trans_date_trans_time,amt,cc_num,merchant,is_fraud\n2020-01-01 00:00:18,50.25,12345678,store_1,0\n"
+    r1 = client.post(
+        "/api/upload",
+        files={"file": ("sparkov.csv", io.BytesIO(sparkov_csv.encode("utf-8")), "text/csv")}
+    )
+    assert r1.status_code == 200, r1.text
+
+    # PaySim
+    paysim_csv = "step,amount,nameOrig,nameDest,isFraud\n1,5000.0,C123,M456,0\n"
+    r2 = client.post(
+        "/api/upload",
+        files={"file": ("paysim.csv", io.BytesIO(paysim_csv.encode("utf-8")), "text/csv")}
+    )
+    assert r2.status_code == 200, r2.text
+
+
+def test_split_date_time_columns():
+    csv_text = "user,date,time,amt\nU1,2026-08-01,14:30:00,75.0\n"
+    res = client.post(
+        "/api/upload",
+        files={"file": ("split.csv", io.BytesIO(csv_text.encode("utf-8")), "text/csv")}
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["validation_summary"]["valid_rows"] == 1
+
+
+
 

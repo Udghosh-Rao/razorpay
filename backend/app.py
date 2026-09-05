@@ -10,6 +10,7 @@ import io
 import os
 import json
 import uuid
+import re
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Header, Query
@@ -93,19 +94,65 @@ OPTIONAL_COLUMN_CAPABILITIES = {
     "fraud_label": ["precision/recall evaluation", "decision quality benchmarking"],
 }
 COLUMN_ALIASES = {
-    "account_id": ["account_id", "customer_id", "user_id", "customer", "account", "client_id", "acct_id"],
-    "transaction_id": ["transaction_id", "txn_id", "transaction", "payment_id", "id", "txn", "payment_reference"],
-    "amount": ["amount", "payment_amount", "transaction_amount", "value", "price", "total", "total_amount"],
-    "timestamp": ["timestamp", "time", "date", "created_at", "transaction_time", "payment_time", "event_time", "datetime"],
-    "merchant_id": ["merchant_id", "merchant", "merchant_code", "merchant_name", "store_id", "shop_id"],
-    "device_id": ["device_id", "device", "device_identifier", "device_token", "phone_id", "imei"],
-    "payment_method": ["payment_method", "method", "payment_type", "instrument", "channel", "payment_channel"],
-    "status": ["status", "payment_status", "transaction_status", "state", "outcome"],
-    "region": ["region", "location", "geo", "country", "city", "state", "area"],
-    "bank": ["bank", "bank_name", "issuer_bank", "bank_code", "financial_institution"],
-    "is_disputed": ["is_disputed", "disputed", "dispute_flag", "has_dispute"],
-    "fraud_label": ["fraud", "is_fraud", "fraud_label", "label", "target", "is_suspicious", "is_flagged",
-                    "suspected_fraud"],
+    "account_id": [
+        "account_id", "customer_id", "user_id", "customer", "account", "client_id", "acct_id",
+        "cust_id", "cc_num", "card_number", "card_num", "card", "user", "nameorig", "sender_id",
+        "sender", "buyer_id", "member_id", "payer_id", "customer_code", "client", "buyer",
+        "payer", "consumer_id", "cardholder", "acc_no", "account_no", "account_number"
+    ],
+    "transaction_id": [
+        "transaction_id", "txn_id", "transaction", "payment_id", "id", "txn", "payment_reference",
+        "trans_num", "trans_id", "transactionid", "order_id", "reference_id", "ref_id", "tx_id",
+        "payment_ref", "charge_id", "invoice_id"
+    ],
+    "amount": [
+        "amount", "payment_amount", "transaction_amount", "value", "price", "total", "total_amount",
+        "amt", "transactionamt", "tx_amount", "txn_amount", "trans_amount", "trans_amt", "total_amt",
+        "order_amount", "amount_inr", "amount_usd", "amount_eur", "gross_amount", "net_amount",
+        "charge", "charge_amount", "bill_amount", "authorized_amount", "amount_val", "paid_amount",
+        "payment_value", "sum", "volume", "cost", "payment", "order_total"
+    ],
+    "timestamp": [
+        "timestamp", "time", "date", "created_at", "transaction_time", "payment_time", "event_time",
+        "datetime", "trans_date_trans_time", "transactiondt", "trans_date", "trans_time", "txn_date",
+        "txn_time", "tx_time", "tx_date", "date_time", "payment_date", "order_date", "order_time",
+        "created_date", "creation_date", "captured_at", "occurred_at", "unix_time", "step",
+        "date_and_time", "time_stamp", "event_timestamp", "created_utc", "payment_timestamp",
+        "trans_datetime", "txn_datetime", "tx_datetime", "timestamp_utc", "epoch", "auth_date"
+    ],
+    "merchant_id": [
+        "merchant_id", "merchant", "merchant_code", "merchant_name", "store_id", "shop_id",
+        "namedest", "receiver_id", "receiver", "vendor_id", "vendor", "payee_id", "recipient_id",
+        "store", "shop", "seller_id", "seller", "merchant_account", "retailer", "partner_id"
+    ],
+    "device_id": [
+        "device_id", "device", "device_identifier", "device_token", "phone_id", "imei",
+        "device_ip", "ip_address", "ip", "session_id", "fingerprint", "hardware_id",
+        "client_ip", "user_agent", "browser_id", "terminal_id"
+    ],
+    "payment_method": [
+        "payment_method", "method", "payment_type", "instrument", "channel", "payment_channel",
+        "type", "mode", "payment_mode", "card_type", "gateway", "payment_instrument"
+    ],
+    "status": [
+        "status", "payment_status", "transaction_status", "state", "outcome", "result",
+        "is_successful", "success", "response_code", "txn_status"
+    ],
+    "region": [
+        "region", "location", "geo", "country", "city", "state", "area", "zip", "zipcode",
+        "postal_code", "billing_country", "billing_city", "shipping_country", "shipping_city"
+    ],
+    "bank": [
+        "bank", "bank_name", "issuer_bank", "bank_code", "financial_institution", "issuer", "issuing_bank"
+    ],
+    "is_disputed": [
+        "is_disputed", "disputed", "dispute_flag", "has_dispute", "chargeback", "is_chargeback"
+    ],
+    "fraud_label": [
+        "fraud", "is_fraud", "fraud_label", "label", "target", "is_suspicious", "is_flagged",
+        "suspected_fraud", "class", "isfraud", "isflaggedfraud", "fraudulent", "is_fraudulent",
+        "fraud_flag", "is_anomaly", "ground_truth"
+    ],
 }
 CSV_COLUMN_DEFINITIONS = {
     "account_id": {"required": False, "description": "Customer or account ID used to group transactions when available.", "example": "ACC1001"},
@@ -130,24 +177,145 @@ CSV_COLUMN_DEFINITIONS = {
 def normalize_column_name(value):
     if value is None:
         return ""
-    return str(value).strip().lower().replace("-", "_").replace(" ", "_").replace("/", "_").replace(".", "_")
+    s = str(value).strip().strip("\ufeff").strip('"').strip("'").lower()
+    return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
 
 
 def resolve_column_aliases(columns):
     normalized_map = {normalize_column_name(col): col for col in columns if col is not None}
     resolved = {}
+
+    # 1. Exact alias matching
     for canonical, aliases in COLUMN_ALIASES.items():
         for alias in aliases:
             normalized_alias = normalize_column_name(alias)
             if normalized_alias in normalized_map:
                 resolved[canonical] = normalized_map[normalized_alias]
                 break
+
+    # 2. Substring / keyword fuzzy matching for essential columns if still unmapped
+    mapped_orig_cols = set(resolved.values())
+    fuzzy_rules = [
+        ("timestamp", ["timestamp", "datetime", "time", "date"]),
+        ("amount", ["amount", "amt", "price", "charge", "total", "volume"]),
+        ("account_id", ["account", "customer", "cust_id", "user_id", "card_num", "cc_num"]),
+        ("merchant_id", ["merchant", "vendor", "store_id", "shop_id"]),
+        ("device_id", ["device", "fingerprint", "imei"]),
+        ("fraud_label", ["fraud", "suspicious"]),
+    ]
+    for canonical, keywords in fuzzy_rules:
+        if canonical not in resolved:
+            for orig_col in columns:
+                if orig_col in mapped_orig_cols:
+                    continue
+                norm = normalize_column_name(orig_col)
+                if any(kw in norm for kw in keywords):
+                    if canonical == "timestamp" and ("birth" in norm or "dob" in norm):
+                        continue
+                    resolved[canonical] = orig_col
+                    mapped_orig_cols.add(orig_col)
+                    break
+
+    return resolved
+
+
+def parse_amount_value(val):
+    """Clean and convert amount strings (including currency symbols/codes and commas) to float."""
+    if pd.isna(val):
+        return np.nan
+    if isinstance(val, (int, float, np.integer, np.floating)):
+        return float(val)
+    val = str(val).strip()
+    letters = re.findall(r"[a-zA-Z]+", val)
+    allowed_currency = {"inr", "rs", "usd", "eur", "gbp", "cad", "aud", "jpy", "cny"}
+    for word in letters:
+        if word.lower() not in allowed_currency:
+            return np.nan
+    cleaned = re.sub(r"(?i)\b(inr|rs|usd|eur|gbp|cad|aud|jpy|cny)\b", "", val)
+    cleaned = re.sub(r"[$₹€£,\s]", "", cleaned).strip(".").strip()
+    try:
+        return float(cleaned)
+    except ValueError:
+        return np.nan
+
+
+def clean_timestamp_series(series):
+    """Resilient datetime series cleaner supporting ISO dates, US/EU dates, Unix epochs, and relative offsets."""
+    sample = series.dropna().head(20)
+    sample_str = sample.astype(str)
+    has_date_separators = sample_str.str.contains(r"[-/:]").any()
+
+    if has_date_separators:
+        parsed = pd.to_datetime(series, errors="coerce", utc=True)
+        if parsed.notna().sum() >= max(1, int(len(series) * 0.5)):
+            return parsed
+
+    num_series = pd.to_numeric(series, errors="coerce")
+    if num_series.notna().sum() >= max(1, int(len(series) * 0.5)):
+        valid_nums = num_series.dropna()
+        max_val = valid_nums.max()
+        if max_val > 1e11:  # milliseconds
+            return pd.to_datetime(num_series, unit="ms", errors="coerce", utc=True)
+        elif max_val > 1e8:  # seconds
+            return pd.to_datetime(num_series, unit="s", errors="coerce", utc=True)
+        else:  # relative seconds / step
+            base_time = pd.Timestamp("2026-01-01", tz="UTC")
+            return base_time + pd.to_timedelta(num_series.fillna(0), unit="s")
+
+    return pd.to_datetime(series, errors="coerce", utc=True)
+
+
+def infer_columns_by_content(df, resolved):
+    """Fallback content-based inspection when column names don't match any aliases."""
+    mapped_cols = set(resolved.values())
+    unmapped = [c for c in df.columns if c not in mapped_cols]
+
+    # 1. Infer timestamp by date parsing
+    if "timestamp" not in resolved:
+        for col in unmapped:
+            sample = df[col].dropna().head(30)
+            if len(sample) == 0:
+                continue
+            parsed = pd.to_datetime(sample, errors="coerce")
+            if parsed.notna().sum() >= max(1, int(len(sample) * 0.7)):
+                resolved["timestamp"] = col
+                mapped_cols.add(col)
+                unmapped.remove(col)
+                break
+
+    # 2. Infer amount by numeric parsing
+    if "amount" not in resolved:
+        for col in unmapped:
+            sample = df[col].dropna().head(30)
+            if len(sample) == 0:
+                continue
+            nums = [parse_amount_value(v) for v in sample]
+            valid_nums = [n for n in nums if not np.isnan(n)]
+            if len(valid_nums) >= max(1, int(len(sample) * 0.7)):
+                arr = np.array(valid_nums)
+                if (arr >= 0).all() and len(set(arr)) > 1:
+                    resolved["amount"] = col
+                    mapped_cols.add(col)
+                    unmapped.remove(col)
+                    break
     return resolved
 
 
 def apply_column_alias_mapping(df):
     issue_df = df.copy()
+
+    # If date and time are in separate columns and no single timestamp column exists:
+    norm_cols = {normalize_column_name(c): c for c in issue_df.columns}
+    has_explicit_ts = any(kw in norm_cols for kw in ["timestamp", "datetime", "created_at", "event_time", "trans_date_trans_time"])
+    if not has_explicit_ts and "date" in norm_cols and "time" in norm_cols:
+        date_col = norm_cols["date"]
+        time_col = norm_cols["time"]
+        combined = issue_df[date_col].astype(str).str.strip() + " " + issue_df[time_col].astype(str).str.strip()
+        issue_df["timestamp"] = combined
+
     resolved = resolve_column_aliases(issue_df.columns)
+    resolved = infer_columns_by_content(issue_df, resolved)
+
     rename_map = {actual: canonical for canonical, actual in resolved.items() if actual != canonical}
     if rename_map:
         issue_df = issue_df.rename(columns=rename_map)
@@ -521,14 +689,62 @@ def get_sample_csv():
 
 
 # ---------------------------------------------------------------------------
-# CSV upload validation
+# CSV upload validation & robust parsing
 # ---------------------------------------------------------------------------
+
+def _clean_raw_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    cleaned_cols = []
+    for c in df.columns:
+        s = str(c).strip().strip("\ufeff").strip('"').strip("'")
+        cleaned_cols.append(s)
+    df.columns = cleaned_cols
+    cols_to_keep = [c for c in df.columns if not (str(c).startswith("Unnamed:") and df[c].isna().all())]
+    if cols_to_keep:
+        df = df[cols_to_keep]
+    return df
+
+
+def robust_read_csv(raw: bytes) -> pd.DataFrame:
+    """Robust CSV reader handling UTF-8 BOM, auto-detecting delimiters, and trimming header spaces."""
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+
+    # 1. Try default comma read
+    try:
+        df = pd.read_csv(io.BytesIO(raw), encoding_errors="replace")
+        if df.shape[1] > 1:
+            return _clean_raw_dataframe(df)
+    except Exception:
+        df = None
+
+    # 2. Auto-sniff separator with python engine
+    try:
+        df_sniff = pd.read_csv(io.BytesIO(raw), sep=None, engine="python", encoding_errors="replace")
+        if df_sniff.shape[1] > 1:
+            return _clean_raw_dataframe(df_sniff)
+    except Exception:
+        pass
+
+    # 3. Try common separators explicitly
+    for sep in [";", "\t", "|", ","]:
+        try:
+            df_sep = pd.read_csv(io.BytesIO(raw), sep=sep, encoding_errors="replace")
+            if df_sep.shape[1] > 1:
+                return _clean_raw_dataframe(df_sep)
+        except Exception:
+            continue
+
+    if df is not None:
+        return _clean_raw_dataframe(df)
+    return pd.read_csv(io.BytesIO(raw), encoding_errors="replace")
+
 
 def validate_uploaded_transactions(df):
     issue_df, column_mapping = apply_column_alias_mapping(df)
     required_cols = set(CSV_REQUIRED_COLUMNS)
     missing_required = sorted(required_cols - set(issue_df.columns))
     if missing_required:
+        found_cols_str = ", ".join(f"'{c}'" for c in df.columns.tolist()[:10])
         return None, {
             "rows_received": len(issue_df),
             "valid_rows": 0,
@@ -537,14 +753,15 @@ def validate_uploaded_transactions(df):
             "recognized_columns": sorted(issue_df.columns.tolist()),
             "column_mapping": column_mapping,
             "error": (
-                "We couldn't process this file. Missing required columns: "
-                f"{', '.join(missing_required)}. Please check the file for a timestamp and amount field. "
-                f"Required columns: {', '.join(CSV_REQUIRED_COLUMNS)}."
+                f"We couldn't process this file. Missing required columns: {', '.join(missing_required)}. "
+                f"Columns detected in your file: [{found_cols_str}]. "
+                "Please check the file for a timestamp (e.g. timestamp, date, time, created_at) "
+                "and an amount (e.g. amount, amt, price, total) column."
             ),
         }
 
-    issue_df["amount"] = pd.to_numeric(issue_df["amount"], errors="coerce")
-    issue_df["timestamp"] = pd.to_datetime(issue_df["timestamp"], errors="coerce", utc=True)
+    issue_df["amount"] = issue_df["amount"].apply(parse_amount_value)
+    issue_df["timestamp"] = clean_timestamp_series(issue_df["timestamp"])
 
     valid_mask = issue_df["amount"].notna() & issue_df["timestamp"].notna()
     valid_df = issue_df.loc[valid_mask].copy()
@@ -588,7 +805,7 @@ async def analyze_upload_csv(
         )
 
     try:
-        df = pd.read_csv(io.BytesIO(raw))
+        df = robust_read_csv(raw)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {str(e)}")
 

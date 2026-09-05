@@ -150,7 +150,17 @@ async function runAnalysis() {
         state.analysis = data;
         renderUploadResult(data);
         document.getElementById("upload-status").scrollIntoView({ behavior: "smooth", block: "start" });
-    } catch (error) { status.innerHTML = `<div class="status-card error"><strong>We couldn't analyze this file.</strong><p>${esc(error.message)}</p></div>`; }
+    } catch (error) {
+        status.innerHTML = `<div class="status-card error">
+            <strong>We couldn't analyze this file.</strong>
+            <p style="margin: 8px 0 12px; line-height: 1.5;">${esc(error.message)}</p>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px;">
+                <a href="/api/csv-template" class="button button-secondary" style="text-decoration:none; padding: 6px 14px; font-size: 13px;" download="payment_transaction_template.csv">
+                    Download CSV Template ↓
+                </a>
+            </div>
+        </div>`;
+    }
 }
 
 function renderUploadResult(data) {
