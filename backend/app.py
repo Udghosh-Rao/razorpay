@@ -768,12 +768,55 @@ async def analyze_upload_csv(
 
     from backend.model import load_model, predict_single
 
-    required_model_features = set(FEATURE_COLS).intersection(features_df.columns)
-    if len(required_model_features) < max(1, min(5, len(FEATURE_COLS))):
-        raise HTTPException(
-            status_code=400,
-            detail="Model scoring unavailable because the uploaded file does not contain enough information to compute the required model features.",
+    # Strict check: ALL required model features must be present and finite.
+    missing_computed_features = sorted(f for f in FEATURE_COLS if f not in features_df.columns)
+    if missing_computed_features:
+        # Degrade gracefully — do not error the whole upload.
+        fallback_reason = (
+            "Model risk scoring unavailable: the feature computation step could not produce "
+            f"all required features from this dataset. Missing: {', '.join(missing_computed_features[:5])}."
         )
+        fallback_result = {
+            "results": [],
+            "accounts_count": 0,
+            "spikes_count": len(merchant_spikes),
+            "clusters_count": len(detected_clusters),
+            "validation_summary": validation_summary,
+            "summary": {
+                "customers": len(customers_df),
+                "transactions": len(txn_df),
+                "merchants": int(txn_df["merchant_id"].nunique()) if "merchant_id" in txn_df.columns else None,
+                "devices": int(txn_df["device_id"].nunique()) if "device_id" in txn_df.columns else None,
+                "clusters_detected": len(detected_clusters),
+                "spikes_detected": len(merchant_spikes),
+            },
+            "schema_report": {
+                "missing_optional_columns": missing_optional,
+                "disabled_analyses": sorted(set(disabled_analyses)),
+                "ground_truth_available": has_ground_truth,
+                "ground_truth_column": label_col if has_ground_truth else None,
+                "ground_truth_validation": ground_truth_validation,
+                "model_scoring_available": False,
+                "model_scoring_reason": fallback_reason,
+                "missing_model_inputs": missing_computed_features,
+                "recognized_columns": sorted(txn_df.columns.tolist()),
+                "unavailable_columns": sorted(set(CSV_COLUMN_DEFINITIONS) - set(txn_df.columns)),
+            },
+            "financial_metrics": None,
+            "model_performance": {"message": fallback_reason},
+            "spikes": merchant_spikes[:5],
+            "clusters": [{k: v for k, v in c.items() if k != "customer_ids"} for c in detected_clusters[:5]],
+        }
+        session.has_analysis = True
+        session.analysis_result = fallback_result
+        session.txn_df = txn_df
+        session.customers_df = customers_df
+        session.merchant_spikes = merchant_spikes
+        session.detected_clusters = detected_clusters
+        session.decisions = []
+        session.log_audit("CSV_UPLOAD_ANALYZED", "file", file.filename,
+                          {"rows_received": len(df), "model_scoring": "unavailable", "reason": "missing_computed_features"})
+        return fallback_result
 
     if not model_artifacts_available():
         raise HTTPException(
@@ -798,7 +841,12 @@ async def analyze_upload_csv(
         cust_id = row["customer_id"]
         feat_dict = row.to_dict()
 
-        ml_score = predict_single(feat_dict, model_obj, scaler_obj)
+        try:
+            ml_score = predict_single(feat_dict, model_obj, scaler_obj)
+        except (ValueError, KeyError):
+            # predict_single raises ValueError if any FEATURE_COL is missing/NaN/non-finite.
+            # Skip this account rather than crashing the whole upload.
+            continue
         anom_score = float(anomaly_scores[idx]) if idx < len(anomaly_scores) else 0.0
         c_risk = float(customer_cluster_risk.get(cust_id, 0.0))
 
@@ -870,7 +918,8 @@ async def analyze_upload_csv(
     results_list.sort(key=lambda x: -x["risk_score"])
 
     # Ensure features_df has total_amount for consistent financial metric aggregation
-    features_df["total_amount"] = features_df["average_amount"] * features_df["txn_count_total"]
+    if not features_df.empty and "average_amount" in features_df.columns and "txn_count_total" in features_df.columns:
+        features_df["total_amount"] = features_df["average_amount"] * features_df["txn_count_total"]
 
     financial_metrics = None
     performance_metrics = None
@@ -878,13 +927,12 @@ async def analyze_upload_csv(
         from backend.financial import compute_financial_metrics
         from sklearn.metrics import precision_score, recall_score, f1_score
 
-        y_true = []
-        for cust_id in features_df["customer_id"]:
-            label_val = txn_df.groupby("customer_id")[label_col].max().get(cust_id, 0)
-            y_true.append(int(pd.to_numeric(label_val, errors="coerce") or 0))
-
         score_by_customer = {str(item["account_id"]): item["risk_score"] for item in results_list}
-        scores = [score_by_customer[str(cust_id)] for cust_id in features_df["customer_id"]]
+        # Only include accounts that were actually scored (some may have been skipped due to feature errors)
+        scored_customer_ids = [cid for cid in features_df["customer_id"] if str(cid) in score_by_customer]
+        label_map = txn_df.groupby("customer_id")[label_col].max()
+        y_true = [int(pd.to_numeric(label_map.get(cid, 0), errors="coerce") or 0) for cid in scored_customer_ids]
+        scores = [score_by_customer[str(cid)] for cid in scored_customer_ids]
         try:
             financial_metrics = compute_financial_metrics(
                 scores, y_true, features_df, tau_low=DEFAULT_TAU_LOW,

@@ -28,7 +28,6 @@ from backend.model import train_all_models
 from backend.risk_engine import RiskFusionEngine
 from backend.policy_engine import evaluate_policy
 from backend.financial import compute_financial_metrics
-from backend.db import populate_evaluation_data
 
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "data", "generated")
@@ -222,11 +221,6 @@ def main():
     with open(results_path, "w") as f:
         json.dump(final_results, f, indent=2)
 
-    print("\n[8/8] Loading evaluation data into database...")
-    populate_evaluation_data(
-        customers_df, merchants_df, transactions_df, devices_df,
-        merchant_spikes, detected_clusters, decisions=decisions,
-    )
 
     print("\n" + "="*60)
     print(f"✅ Pipeline Complete! Results exported to {results_path}")
