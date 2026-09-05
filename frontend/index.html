@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Payment risk intelligence for merchants. Understand what changed, why it matters, and what to do next.">
-    <title>Sentinel | Payment risk intelligence</title>
+    <meta name="description" content="Razorpay Sentinel — payment fraud monitoring for finance and operations teams. Spot suspicious activity, understand your exposure, and act with confidence.">
+    <title>Sentinel | Fraud Monitoring Dashboard</title>
     <link rel="stylesheet" href="/index.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,120 +16,120 @@
         <aside class="sidebar">
             <a class="brand" href="#" data-view="overview">
                 <span class="brand-mark">S</span>
-                <span><strong>Sentinel</strong><small>Payment risk intelligence</small></span>
+                <span><strong>Sentinel</strong><small>Fraud Monitoring</small></span>
             </a>
             <nav class="primary-nav" aria-label="Primary navigation">
-                <p class="nav-label">Workspace</p>
-                <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Overview</button>
-                <button class="nav-item" data-view="analyze"><span class="nav-icon">↥</span>Analyze Data</button>
-                <button class="nav-item" data-view="findings"><span class="nav-icon">!</span>Risk Findings</button>
-                <button class="nav-item" data-view="impact"><span class="nav-icon">₹</span>Financial Impact</button>
-                <button class="nav-item" data-view="investigations"><span class="nav-icon">⌕</span>Investigations</button>
-                <p class="nav-label technical-label">Technical</p>
-                <button class="nav-item" data-view="model"><span class="nav-icon">◒</span>Model &amp; Evaluation</button>
-                <button class="nav-item" data-view="audit"><span class="nav-icon">◷</span>Audit</button>
+                <p class="nav-label">Dashboard</p>
+                <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Summary</button>
+                <button class="nav-item" data-view="analyze"><span class="nav-icon">↥</span>Upload Data</button>
+                <button class="nav-item" data-view="findings"><span class="nav-icon">!</span>Alerts &amp; Flags</button>
+                <button class="nav-item" data-view="impact"><span class="nav-icon">₹</span>Financial Exposure</button>
+                <button class="nav-item" data-view="investigations"><span class="nav-icon">⌕</span>Case Review</button>
+                <p class="nav-label technical-label">Reports</p>
+                <button class="nav-item" data-view="model"><span class="nav-icon">◒</span>Detection Report</button>
+                <button class="nav-item" data-view="audit"><span class="nav-icon">◷</span>Activity Log</button>
             </nav>
             <div class="sidebar-footer">
                 <span class="status-dot"></span><span id="system-status-text">Checking system</span>
-                <span class="version">Policy v1.0.0</span>
+                <span class="version">Fraud Policy v1.0</span>
             </div>
         </aside>
 
         <main class="main">
             <header class="topbar">
                 <div>
-                    <p class="eyebrow">Merchant risk workspace</p>
-                    <h1 id="page-title">Overview</h1>
-                    <p id="page-subtitle" class="page-subtitle">See what changed in your payment activity and decide what to do next.</p>
+                    <p class="eyebrow">Razorpay · Fraud &amp; Risk Operations</p>
+                    <h1 id="page-title">Summary</h1>
+                    <p id="page-subtitle" class="page-subtitle">Your current fraud position at a glance.</p>
                 </div>
-                <button class="button button-quiet" id="refresh-button">Refresh</button>
+                <button class="button button-quiet" id="refresh-button">↻ Refresh</button>
             </header>
 
             <div class="content">
                 <section class="view active" id="view-overview">
                     <div class="hero">
                         <div class="hero-copy">
-                            <span class="kicker">Payment risk, made understandable</span>
-                            <h2>Understand your payment risk before it becomes a costly problem.</h2>
-                            <p>Upload transaction data to identify unusual payment activity, emerging risk patterns, potential financial exposure, and the evidence behind every finding.</p>
+                            <span class="kicker">Built for fraud &amp; finance teams</span>
+                            <h2>Know your fraud exposure before it hits your books.</h2>
+                            <p>Upload your payment transactions to instantly flag suspicious merchants, identify at-risk accounts, quantify your financial exposure, and get a clear recommended action — no data science skills needed.</p>
                             <div class="hero-actions">
-                                <button class="button button-primary" data-action="open-upload">Analyze Payment Data <span>→</span></button>
+                                <button class="button button-primary" data-action="open-upload">Upload Transactions <span>→</span></button>
                                 <button class="button button-secondary" data-action="how-it-works">How It Works</button>
                             </div>
                         </div>
                         <div class="hero-signal" aria-hidden="true">
                             <div class="signal-orbit orbit-one"></div><div class="signal-orbit orbit-two"></div>
-                            <div class="signal-core"><span>risk</span><strong>early</strong></div>
-                            <span class="signal-chip chip-one">change</span><span class="signal-chip chip-two">evidence</span><span class="signal-chip chip-three">action</span>
+                            <div class="signal-core"><span>fraud</span><strong>early</strong></div>
+                            <span class="signal-chip chip-one">flag</span><span class="signal-chip chip-two">expose</span><span class="signal-chip chip-three">act</span>
                         </div>
                     </div>
 
                     <div class="section-heading" id="how-it-works">
-                        <div><p class="eyebrow">One clear path</p><h2>From payment data to a confident next step.</h2></div>
-                        <p>Start with the information you have. Sentinel only uses fields present in your file.</p>
+                        <div><p class="eyebrow">Simple, 6-step process</p><h2>From a spreadsheet to a clear decision.</h2></div>
+                        <p>No setup required. Just bring your transaction export — even a basic one.</p>
                     </div>
                     <div class="flow-grid">
-                        <article class="flow-card"><span>01</span><h3>Upload</h3><p>Give us your payment data.</p></article>
-                        <article class="flow-card"><span>02</span><h3>Understand</h3><p>We identify the fields and information available.</p></article>
-                        <article class="flow-card"><span>03</span><h3>Analyze</h3><p>We look for unusual payment behavior and emerging risk.</p></article>
-                        <article class="flow-card"><span>04</span><h3>Explain</h3><p>We show what changed and why it matters.</p></article>
-                        <article class="flow-card"><span>05</span><h3>Quantify</h3><p>We estimate potential financial exposure where the data supports it.</p></article>
-                        <article class="flow-card"><span>06</span><h3>Act</h3><p>We recommend Allow, Review, or Block based on policy.</p></article>
+                        <article class="flow-card"><span>01</span><h3>Upload</h3><p>Share your payment transaction export as a CSV file.</p></article>
+                        <article class="flow-card"><span>02</span><h3>Read</h3><p>We identify what data you have available and adapt to it.</p></article>
+                        <article class="flow-card"><span>03</span><h3>Flag</h3><p>We scan for merchants and accounts with suspicious activity spikes.</p></article>
+                        <article class="flow-card"><span>04</span><h3>Explain</h3><p>Every alert includes plain-English reasoning — what changed and why it matters.</p></article>
+                        <article class="flow-card"><span>05</span><h3>Quantify</h3><p>We estimate your financial exposure based on the flagged activity.</p></article>
+                        <article class="flow-card"><span>06</span><h3>Recommend</h3><p>We tell you whether to clear, review, or block each account or merchant.</p></article>
                     </div>
 
-                    <div class="section-heading compact"><div><p class="eyebrow">Latest view</p><h2>Your risk position</h2></div></div>
+                    <div class="section-heading compact"><div><p class="eyebrow">Live snapshot</p><h2>Your fraud position right now</h2></div></div>
                     <div class="metric-grid" id="overview-metrics"></div>
                     <div class="two-column">
-                        <div class="card"><div class="card-header"><div><p class="eyebrow">Watchlist</p><h3>What changed</h3></div><button class="text-button" data-view-link="findings">View findings →</button></div><div id="overview-findings"></div></div>
-                        <div class="card"><div class="card-header"><div><p class="eyebrow">Decision support</p><h3>What to do next</h3></div></div><div id="overview-action" class="action-panel"></div></div>
+                        <div class="card"><div class="card-header"><div><p class="eyebrow">Active alerts</p><h3>What needs attention</h3></div><button class="text-button" data-view-link="findings">See all alerts →</button></div><div id="overview-findings"></div></div>
+                        <div class="card"><div class="card-header"><div><p class="eyebrow">Recommended action</p><h3>What to do next</h3></div></div><div id="overview-action" class="action-panel"></div></div>
                     </div>
                     <div id="overview-visuals" style="margin-top: 14px;"></div>
                     <div id="analysis-detail-panels"></div>
                 </section>
 
                 <section class="view" id="view-analyze">
-                    <div class="section-heading page-heading"><div><p class="eyebrow">Start here</p><h2>Analyze your payment data</h2><p>Bring a CSV in the shape you already have. We adapt to the fields provided.</p></div><a class="text-button" href="/api/csv-template">Download example CSV ↓</a></div>
+                    <div class="section-heading page-heading"><div><p class="eyebrow">Start here</p><h2>Upload your transaction data</h2><p>Export your payments as a CSV from your system. Any format works — we read the columns automatically.</p></div><a class="text-button" href="/api/csv-template">Download sample file ↓</a></div>
                     <div class="upload-card" id="upload-card">
                         <input type="file" id="csv-file-input" accept=".csv" hidden>
-                        <div class="upload-icon">↥</div><h3>Drop a transaction CSV here</h3><p>Or choose a file from your computer. A timestamp and amount are enough to start.</p>
-                        <button class="button button-primary" data-action="choose-file">Choose CSV file</button>
+                        <div class="upload-icon">↥</div><h3>Drop your transaction file here</h3><p>Or select it from your computer. You need at least a date/time column and a transaction amount. That's it.</p>
+                        <button class="button button-primary" data-action="choose-file">Select CSV file</button>
                         <p id="selected-file" class="file-label"></p>
-                        <button class="button button-secondary run-button" id="run-analysis" hidden>Analyze Data →</button>
+                        <button class="button button-secondary run-button" id="run-analysis" hidden>Run Fraud Check →</button>
                     </div>
                     <div id="upload-status"></div>
                     <div class="capability-guide">
-                        <div><span class="guide-number">A</span><h3>We understand your file</h3><p>Common aliases are recognized automatically, so your column names do not need to match our template.</p></div>
-                        <div><span class="guide-number">B</span><h3>We work with what is available</h3><p>Missing optional fields do not block analysis. They are shown as unavailable instead of being inferred.</p></div>
-                        <div><span class="guide-number">C</span><h3>We never invent context</h3><p>No customer, merchant, device, region, bank, or payment method is created when your file does not provide it.</p></div>
+                        <div><span class="guide-number">A</span><h3>Works with your export format</h3><p>Column names like "txn_date", "transaction_time", or "date" are all recognized automatically. You don't need to rename anything.</p></div>
+                        <div><span class="guide-number">B</span><h3>Missing columns? No problem.</h3><p>If merchant IDs or account numbers aren't in your file, those checks are skipped — you still get everything else.</p></div>
+                        <div><span class="guide-number">C</span><h3>We only use what you give us</h3><p>Nothing is assumed or invented. Every alert is backed by data in your file. If it's not there, we say so.</p></div>
                     </div>
                 </section>
 
                 <section class="view" id="view-findings">
-                    <div class="section-heading page-heading"><div><p class="eyebrow">Evidence first</p><h2>Risk findings</h2><p>Patterns worth a closer look, ordered by their potential business impact.</p></div></div>
+                    <div class="section-heading page-heading"><div><p class="eyebrow">Needs your attention</p><h2>Alerts &amp; flags</h2><p>Suspicious merchants and accounts flagged from your transaction data, ordered by financial impact.</p></div></div>
                     <div id="findings-summary" class="finding-summary"></div>
                     <div id="findings-charts" class="two-column" style="margin-bottom:14px;"></div>
                     <div class="card"><div id="findings-list"></div></div>
                 </section>
 
                 <section class="view" id="view-impact">
-                    <div class="section-heading page-heading"><div><p class="eyebrow">Money at stake</p><h2>Financial impact</h2><p>Exposure estimates are shown only when the data supports them.</p></div></div>
+                    <div class="section-heading page-heading"><div><p class="eyebrow">Money at risk</p><h2>Financial exposure</h2><p>How much money is tied to flagged activity. Only shown when your data supports it — never estimated without evidence.</p></div></div>
                     <div id="impact-content"></div>
                     <div id="impact-chart-wrap" style="margin-top:14px;"></div>
                 </section>
 
                 <section class="view" id="view-investigations">
-                    <div class="section-heading page-heading"><div><p class="eyebrow">Resolve the question</p><h2>Investigations</h2><p>Turn a finding into an evidence-grounded review note.</p></div></div>
-                    <div class="card investigation-card"><div class="form-row"><label>Entity ID<input id="investigate-entity-id" placeholder="e.g. account or merchant ID"></label><label>Entity type<select id="investigate-entity-type"><option value="account">Account</option><option value="merchant">Merchant</option><option value="cluster">Cluster</option></select></label><button class="button button-primary" id="investigate-button">Generate memo</button></div><div id="investigation-output"></div></div>
+                    <div class="section-heading page-heading"><div><p class="eyebrow">Dig deeper</p><h2>Case review</h2><p>Look up any merchant or account from your analysis and get a plain-English case summary you can share with your team.</p></div></div>
+                    <div class="card investigation-card"><div class="form-row"><label>Account / Merchant ID<input id="investigate-entity-id" placeholder="e.g. ACCT_00123 or MERCH_456"></label><label>Type<select id="investigate-entity-type"><option value="account">Customer Account</option><option value="merchant">Merchant</option><option value="cluster">Linked Group</option></select></label><button class="button button-primary" id="investigate-button">Generate Case Summary</button></div><div id="investigation-output"></div></div>
                 </section>
 
                 <section class="view" id="view-model">
-                    <div class="section-heading page-heading"><div><p class="eyebrow">Technical evidence</p><h2>Model &amp; evaluation</h2><p>This section shows how the detection system performs on data it did not use for training.</p></div></div>
+                    <div class="section-heading page-heading"><div><p class="eyebrow">How we decide</p><h2>Detection report</h2><p>A plain-English explanation of how Sentinel flags suspicious activity and the accuracy of those decisions on your data.</p></div></div>
                     <div id="model-content"></div>
                     <div id="model-charts" style="margin-top:14px;"></div>
                 </section>
 
                 <section class="view" id="view-audit">
-                    <div class="section-heading page-heading"><div><p class="eyebrow">Traceability</p><h2>Audit</h2><p>Operational actions and decisions recorded by the system.</p></div></div>
+                    <div class="section-heading page-heading"><div><p class="eyebrow">Full record</p><h2>Activity log</h2><p>Every upload, analysis, and case review recorded in order. Use this for compliance or team handover.</p></div></div>
                     <div class="card"><div id="audit-content"></div></div>
                 </section>
             </div>
