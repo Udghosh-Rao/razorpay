@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+burstguard.db
+results.json
+/data/generated/
+/.pytest_cache/
